@@ -1,0 +1,15 @@
+[theme]
+# Główny kolor przycisków i zaznaczeń
+primaryColor = "#BDE3C3"
+
+# Kolor tła całej strony
+backgroundColor = "#E6D8C3"
+
+# Kolor tła paska bocznego (sidebar)
+secondaryBackgroundColor = "#F9F8F6"
+
+# Kolor tekstu
+textColor = "#181C14"
+
+# Czcionka (opcje: "sans serif", "serif", "monospace")
+font = "sans serif"
