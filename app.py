@@ -211,6 +211,11 @@ if "zapisane_przypadki" not in st.session_state:
 if "widok_archiwum" not in st.session_state:
     st.session_state.widok_archiwum = None
 
+if "widok_archiwum" not in st.session_state:
+    st.session_state.widok_archiwum = None
+if "liczba_podpowiedzi" not in st.session_state:
+    st.session_state.liczba_podpowiedzi = 0
+
 # ==========================================
 # 5. SIDEBAR
 # ==========================================
@@ -228,20 +233,52 @@ with st.sidebar:
     
     with st.expander("📚 Baza Wiedzy", expanded=False):
         lista_wszystkich_chorob = []
-        sciezka_json = os.path.join("INTERNA.json")
-        if os.path.exists(sciezka_json):
-            with open(sciezka_json, "r", encoding="utf-8") as f:
-                choroby_domyslne = json.load(f)
-            lista_wszystkich_chorob.extend(choroby_domyslne)
-            st.success(f"⚡ Wczytano: INTERNA ({len(choroby_domyslne)} chorób)")
+        
+    
+        dostepne_pliki = []
+        if os.path.exists("my_notes"):
+            dostepne_pliki = [f for f in os.listdir("my_notes") if f.endswith(".json")]
+            
+        if not dostepne_pliki:
+            st.warning("Brak plików .json w folderze my_notes! Użyj konwertera.")
         else:
-            st.warning("Brak pliku my_notes/INTERNA.json. Uruchom skrypt konwerter.py!")
+            st.markdown("<div style='margin-bottom: 10px; font-weight: normal; color: #1B211A;'>Wybierz bazy z których chcesz losować przypadki:</div>", unsafe_allow_html=True)
+            
+        
+            for nazwa_pliku in dostepne_pliki:
+                sciezka_json = os.path.join("my_notes", nazwa_pliku)
+                with open(sciezka_json, "r", encoding="utf-8") as f:
+                    choroby_domyslne = json.load(f)
+                
+                nazwa_wyswietlana = nazwa_pliku.replace(".json", "")
+                ile_przypadkow = len(choroby_domyslne)
+                
+            
+                czy_aktywna = st.toggle(
+                    f" **{nazwa_wyswietlana}** ({ile_przypadkow} przypadków)", 
+                    value=True, 
+                    key=f"toggle_{nazwa_pliku}"
+                )
+                
+            
+                if czy_aktywna:
+                    lista_wszystkich_chorob.extend(choroby_domyslne)
 
-        wgrany_plik = st.file_uploader("Dograj dodatkowe notatki (PDF)", type=["pdf"])
+        st.divider()
+
+    
+        wgrany_plik = st.file_uploader("Dograj jednorazowe notatki (PDF)", type=["pdf"], key="pdf_uploader_baza")
+        
         if wgrany_plik is not None:
             choroby_dodatkowe = wczytaj_i_podziel_pdf(wgrany_plik)
             lista_wszystkich_chorob.extend(choroby_dodatkowe)
-            st.success(f"➕ Dodano {len(choroby_dodatkowe)} chorób z Twojego pliku!")
+            st.markdown(
+                f"""
+                <div style="background-color: #e3f2fd; border-left: 4px solid #0083B0; padding: 10px; margin-top: 10px; border-radius: 4px; color: #01579b;">
+                    📄 <b>Twój plik PDF</b>: {len(choroby_dodatkowe)} przypadków
+                </div>
+                """, unsafe_allow_html=True
+            )
 
     st.divider()
 
@@ -250,6 +287,7 @@ with st.sidebar:
         with st.spinner('Docent analizuje notatki i losuje przypadek...'):
             st.session_state.messages = []
             st.session_state.widok_archiwum = None
+            st.session_state.liczba_podpowiedzi = 0
             
             wylosowana_choroba = random.choice(lista_wszystkich_chorob)
             prompt_startowy = f"Oto opis wylosowanej jednostki chorobowej z moich notatek:\n\n{wylosowana_choroba}\n\nPrzeanalizuj ją po cichu i od razu rozpocznij ze mną Zadanie 1 (Opis pacjenta), wprowadzając mnie w przypadek tej właśnie choroby."
@@ -344,15 +382,60 @@ else:
         with st.chat_message(message["role"], avatar=pobierz_awatar(message["role"])):
             st.markdown(message["content"])
 
-    if prompt := st.chat_input("Napisz swoją diagnozę, pytania lub zleć badania..."):
-        st.session_state.messages.append({"role": "user", "content": prompt})
+   # --- LOGIKA WIDOCZNOŚCI POLA TEKSTOWEGO ---
+    czy_mozna_pisac = False
+    
+    if st.session_state.chat_session is not None:
+        if len(st.session_state.messages) > 0:
+            ostatni_tekst = st.session_state.messages[-1]["content"]
+            if "OSTATECZNY WYNIK" not in ostatni_tekst:
+                czy_mozna_pisac = True
+
+    if czy_mozna_pisac:
         
-        with st.chat_message("user", avatar=pobierz_awatar("user")):
-            st.markdown(prompt)
+        ile_podpowiedzi = st.session_state.liczba_podpowiedzi
+        
+        
+        col_pusta, col_przycisk = st.columns([4, 1])
+        
+        with col_przycisk:
+            if ile_podpowiedzi < 3:
+                tekst_przycisku = f"🛟 Koło ratunkowe"
+                ukryty_prompt = "UKRYTA KOMENDA OD SYSTEMU: Uczeń prosi o małą podpowiedź do obecnego etapu. Naprowadź go delikatnie i krótko (np. wskaż grupę leków, podaj typ objawu), ale pod żadnym pozorem nie podawaj gotowej diagnozy ani pełnej odpowiedzi."
+                
+                tekst_usera = f"*Wykorzystano koło ratunkowe {ile_podpowiedzi+1}/3 (-10% punktów)*"
+                
+                if st.button(tekst_przycisku, use_container_width=True):
+                    st.session_state.liczba_podpowiedzi += 1
+                    st.session_state.messages.append({"role": "user", "content": tekst_usera})
+                    
+                    with st.spinner("Tutor podpowiada..."):
+                        historia_bez_ostatniej = st.session_state.messages[:-1]
+                        odpowiedz_tekst, nowa_sesja = wyslij_wiadomosc_kaskadowo(ukryty_prompt, historia_bez_ostatniej)
+                        
+                        if odpowiedz_tekst is None:
+                            st.error("⏳ Błąd sieci! Spróbuj ponownie.")
+                            st.session_state.messages.pop()
+                            st.session_state.liczba_podpowiedzi -= 1
+                        else:
+                            st.session_state.chat_session = nowa_sesja
+                            st.session_state.messages.append({"role": "assistant", "content": odpowiedz_tekst})
+                            st.rerun()
+            else:
+                
+                st.button("🛟 Wykorzystano (3/3)", disabled=True, use_container_width=True)
+
+
+        # --- GŁÓWNY CZAT ---
+        if prompt := st.chat_input("Napisz swoją diagnozę, pytania lub zleć badania..."):
+            st.session_state.messages.append({"role": "user", "content": prompt})
             
-        with st.chat_message("assistant", avatar=pobierz_awatar("assistant")):
-            if prompt.strip() == "Bingo IHK":
-                oszukana_odpowiedz = """
+            with st.chat_message("user", avatar=pobierz_awatar("user")):
+                st.markdown(prompt)
+                
+            with st.chat_message("assistant", avatar=pobierz_awatar("assistant")):
+                if prompt.strip() == "Bingo IHK":
+                    oszukana_odpowiedz = """
 Gratulacje! Użyto tajnego kodu ominięcia symulacji.
 
 | Sekcja Zadania | Komentarze | Wynik % z sekcji |
@@ -364,49 +447,50 @@ Gratulacje! Użyto tajnego kodu ominięcia symulacji.
 | Zadanie 2 - Postępowanie i leczenie | Świetny plan i leczenie farmakologiczne. | 100% |
 | Zadanie 3 - Pytania teoretyczne | Znakomite zrozumienie patofizjologii. | 100% |
 
-OSTATECZNY WYNIK: 100%
+**OSTATECZNY WYNIK: 100%**
 """
-                st.markdown(oszukana_odpowiedz)
-                st.session_state.messages.append({"role": "assistant", "content": oszukana_odpowiedz})
-                st.session_state.zapisane_przypadki.append({
-                    "wynik": "100",
-                    "historia": list(st.session_state.messages)
-                })
-                st.rerun()
-                
-            else:
-                with st.spinner("Tutor analizuje Twoją odpowiedź... (może to chwilę potrwać)"):
-                    # Wysyłamy historię BEZ ostatniego pytania (bo prompt idzie osobno)
-                    historia_bez_ostatniej = st.session_state.messages[:-1]
-                    odpowiedz_tekst, nowa_sesja = wyslij_wiadomosc_kaskadowo(prompt, historia_bez_ostatniej)
+                    st.markdown(oszukana_odpowiedz)
+                    st.session_state.messages.append({"role": "assistant", "content": oszukana_odpowiedz})
+                    st.session_state.zapisane_przypadki.append({
+                        "wynik": "100",
+                        "historia": list(st.session_state.messages)
+                    })
+                    st.rerun()
                     
-                    if odpowiedz_tekst is None:
-                        st.error("⏳ Wszystkie dostępne modele AI są zablokowane limitami! Odczekaj kilkanaście minut.")
-                        st.session_state.messages.pop() # Usuwamy niezrealizowane pytanie
-                    else:
-                        st.session_state.chat_session = nowa_sesja
+                else:
+                    with st.spinner("Tutor analizuje Twoją odpowiedź... (może to chwilę potrwać)"):
+                        historia_bez_ostatniej = st.session_state.messages[:-1]
+                        odpowiedz_tekst, nowa_sesja = wyslij_wiadomosc_kaskadowo(prompt, historia_bez_ostatniej)
                         
-                        # --- TWOJA LOGIKA OCENY JSON ---
-                        if "```json" in odpowiedz_tekst:
-                            json_match = re.search(r"```json\s*(.*?)\s*```", odpowiedz_tekst, re.DOTALL)
-                            if json_match:
-                                try:
-                                    dane = json.loads(json_match.group(1))
-                                    for klucz in dane:
-                                        if "komentarz" in dane[klucz]:
-                                            dane[klucz]["komentarz"] = dane[klucz]["komentarz"].replace("<br>", " ").replace("<br/>", " ").replace("\n", " ")
-                                    
-                                    suma_praktyka = (dane["zadanie_1_badania"]["wynik"] + 
-                                                     dane["zadanie_2_interpretacja"]["wynik"] + 
-                                                     dane["zadanie_2_diagnoza"]["wynik"] + 
-                                                     dane["zadanie_2_roznicowa"]["wynik"] + 
-                                                     dane["zadanie_2_leczenie"]["wynik"])
-                                    srednia_praktyka = suma_praktyka / 5
-                                    wynik_teoria = dane["zadanie_3_teoria"]["wynik"]
-                                    
-                                    ostateczny_wynik = round((srednia_praktyka * 0.85) + (wynik_teoria * 0.15))
-                                    
-                                    tabela_md = f"""
+                        if odpowiedz_tekst is None:
+                            st.error("⏳ Wszystkie dostępne modele AI są zablokowane limitami! Odczekaj kilkanaście minut.")
+                            st.session_state.messages.pop() 
+                        else:
+                            st.session_state.chat_session = nowa_sesja
+                            
+                            
+                            if "```json" in odpowiedz_tekst:
+                                json_match = re.search(r"```json\s*(.*?)\s*```", odpowiedz_tekst, re.DOTALL)
+                                if json_match:
+                                    try:
+                                        dane = json.loads(json_match.group(1))
+                                        for klucz in dane:
+                                            if "komentarz" in dane[klucz]:
+                                                dane[klucz]["komentarz"] = dane[klucz]["komentarz"].replace("<br>", " ").replace("<br/>", " ").replace("\n", " ")
+                                        
+                                        suma_praktyka = (dane["zadanie_1_badania"]["wynik"] + 
+                                                         dane["zadanie_2_interpretacja"]["wynik"] + 
+                                                         dane["zadanie_2_diagnoza"]["wynik"] + 
+                                                         dane["zadanie_2_roznicowa"]["wynik"] + 
+                                                         dane["zadanie_2_leczenie"]["wynik"])
+                                        srednia_praktyka = suma_praktyka / 5
+                                        wynik_teoria = dane["zadanie_3_teoria"]["wynik"]
+                                        
+                                        wstepny_wynik = round((srednia_praktyka * 0.85) + (wynik_teoria * 0.15))
+                                        kara_punkty = st.session_state.liczba_podpowiedzi * 10
+                                        ostateczny_wynik = max(0, wstepny_wynik - kara_punkty)
+                                        
+                                        tabela_md = f"""
 | Sekcja Zadania | Komentarze | Wynik % z sekcji |
 | :--- | :--- | :--- |
 | Zadanie 1 - Zlecone badania | {dane['zadanie_1_badania']['komentarz']} | {dane['zadanie_1_badania']['wynik']}% |
@@ -415,32 +499,33 @@ OSTATECZNY WYNIK: 100%
 | Zadanie 2 - Diagnostyka różnicowa | {dane['zadanie_2_roznicowa']['komentarz']} | {dane['zadanie_2_roznicowa']['wynik']}% |
 | Zadanie 2 - Postępowanie i leczenie | {dane['zadanie_2_leczenie']['komentarz']} | {dane['zadanie_2_leczenie']['wynik']}% |
 | Zadanie 3 - Pytania teoretyczne | {dane['zadanie_3_teoria']['komentarz']} | {dane['zadanie_3_teoria']['wynik']}% |
+| 🛟 **Użyte podpowiedzi** | Wykorzystano {st.session_state.liczba_podpowiedzi} szt. | **-{kara_punkty}%** |
 
 **OSTATECZNY WYNIK: {ostateczny_wynik}%**
 """
-                                    st.markdown(tabela_md)
-                                    st.session_state.messages.append({"role": "assistant", "content": tabela_md})
-                                    
-                                    st.session_state.zapisane_przypadki.append({
-                                        "wynik": str(ostateczny_wynik),
-                                        "historia": [dict(m) for m in st.session_state.messages]
-                                    })
-                                    st.rerun()
-                                except json.JSONDecodeError:
-                                    st.error("⚠️ Docent pomylił się przy wpisywaniu ocen do systemu. Odśwież stronę lub spróbuj ponownie.")
-                                    st.session_state.messages.pop()
+                                        st.markdown(tabela_md)
+                                        st.session_state.messages.append({"role": "assistant", "content": tabela_md})
+                                        
+                                        st.session_state.zapisane_przypadki.append({
+                                            "wynik": str(ostateczny_wynik),
+                                            "historia": [dict(m) for m in st.session_state.messages]
+                                        })
+                                        st.rerun()
+                                    except json.JSONDecodeError:
+                                        st.error("⚠️ Docent pomylił się przy wpisywaniu ocen do systemu. Odśwież stronę lub spróbuj ponownie.")
+                                        st.session_state.messages.pop()
 
-                        elif "OSTATECZNY WYNIK" in odpowiedz_tekst.upper():
-                            st.markdown(odpowiedz_tekst)
-                            st.session_state.messages.append({"role": "assistant", "content": odpowiedz_tekst})
-                            wynik_match = re.search(r"OSTATECZNY WYNIK:\s*\*?\*?\s*(\d+)", odpowiedz_tekst, re.IGNORECASE)
-                            zlapany_wynik = wynik_match.group(1) if wynik_match else "?"
-                            st.session_state.zapisane_przypadki.append({
-                                "wynik": str(zlapany_wynik),
-                                "historia": [dict(m) for m in st.session_state.messages]
-                            })
-                            st.rerun()
+                            elif "OSTATECZNY WYNIK" in odpowiedz_tekst.upper():
+                                st.markdown(odpowiedz_tekst)
+                                st.session_state.messages.append({"role": "assistant", "content": odpowiedz_tekst})
+                                wynik_match = re.search(r"OSTATECZNY WYNIK:\s*\*?\*?\s*(\d+)", odpowiedz_tekst, re.IGNORECASE)
+                                zlapany_wynik = wynik_match.group(1) if wynik_match else "?"
+                                st.session_state.zapisane_przypadki.append({
+                                    "wynik": str(zlapany_wynik),
+                                    "historia": [dict(m) for m in st.session_state.messages]
+                                })
+                                st.rerun()
 
-                        else:
-                            st.markdown(odpowiedz_tekst)
-                            st.session_state.messages.append({"role": "assistant", "content": odpowiedz_tekst})
+                            else:
+                                st.session_state.messages.append({"role": "assistant", "content": odpowiedz_tekst})
+                                st.rerun()
