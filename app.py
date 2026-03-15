@@ -234,6 +234,16 @@ def wczytaj_i_podziel_pdf(zrodlo):
     lista_chorob = [f.strip() for f in fragmenty if len(f.strip()) > 50]
     return lista_chorob
 
+def pokaz_powiadomienie(tekst, ikona="✅"):
+    st.markdown(
+        f"""
+        <div style="background-color: #EAF4EA; border-left: 5px solid #84B179; padding: 12px; border-radius: 4px; color: #1B211A; font-size: 14px; margin-bottom: 10px;">
+            {ikona} {tekst}
+        </div>
+        """, 
+        unsafe_allow_html=True
+    )
+
 def generuj_raport_html(wszystkie_przypadki):
     html = """
     <html>
@@ -316,7 +326,7 @@ with st.sidebar:
         unsafe_allow_html=True
     )
     
-    with st.expander("Otwórz listę plików...", expanded=False):
+    with st.expander("Otwórz listę plików", expanded=False):
         lista_wszystkich_chorob = []
         
     
@@ -325,7 +335,14 @@ with st.sidebar:
             dostepne_pliki = [f for f in os.listdir("my_notes") if f.endswith(".json")]
             
         if not dostepne_pliki:
-            st.warning("Brak plików .json w folderze my_notes! Użyj konwertera.")
+            st.markdown(
+                """
+                <div style="background-color: #F5F0E6; border-left: 5px solid #84B179; padding: 12px; border-radius: 4px; color: #1B211A; font-size: 14px;">
+                    ⚠️ <b>Brak plików .json</b> w folderze my_notes! Użyj konwertera.
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
         else:
             st.markdown("<div style='margin-bottom: 10px; font-weight: normal; color: #1B211A;'>Wybierz bazy z których chcesz losować przypadki:</div>", unsafe_allow_html=True)
             
@@ -391,7 +408,7 @@ with st.sidebar:
         unsafe_allow_html=True
     )
     if st.button("▶ Wylosuj pacjenta", use_container_width=True, disabled=len(lista_wszystkich_chorob) == 0):
-        with st.spinner('Docent analizuje notatki i losuje przypadek...'):
+        with st.spinner('Asystent analizuje notatki i losuje przypadek...'):
             st.session_state.messages = []
             st.session_state.widok_archiwum = None
             st.session_state.liczba_podpowiedzi = 0
@@ -410,6 +427,15 @@ with st.sidebar:
                 st.error("⏳ Wszystkie dostępne modele AI są obecnie zajęte (limit dzienny). Spróbuj ponownie później!")
                 
     if len(lista_wszystkich_chorob) > 0:
+        st.markdown(
+        f"""
+        <div style="background-color: #EAF4EA; border-left: 5px solid #84B179; padding: 12px; border-radius: 4px; color: #1B211A; font-size: 14px; margin-bottom: 10px;">
+            Aktualna liczba dostępnych przypadków:<span style="color: #088C6F; font-weight: bold;"> {len(lista_wszystkich_chorob)} </span>
+        </div>
+        """, 
+        unsafe_allow_html=True
+        )
+       
         st.markdown("""
 <style>
     /* ZAKŁADKI */
@@ -490,21 +516,21 @@ with st.sidebar:
     
     if st.session_state.logged_in:
         st.markdown(
-            f"""
-            <div style="background-color: #EAF4EA; border-left: 5px solid #84B179; padding: 12px; border-radius: 4px; color: #1B211A; font-size: 14px;">
-                Zalogowano: <span style="color: #088C6F; font-weight: bold;">{st.session_state.user_nick}</span>
-            </div>
-            """, 
-            unsafe_allow_html=True
+        f"""
+        <div style="background-color: #EAF4EA; border-left: 5px solid #84B179; padding: 12px; border-radius: 4px; color: #1B211A; font-size: 14px; margin-bottom: 10px;">
+            Zalogowano: <span style="color: #088C6F; font-weight: bold;">{st.session_state.user_nick}</span>
+        </div>
+        """, 
+        unsafe_allow_html=True
         )
     else:
         st.markdown(
-            """
-            <div style="background-color: #F5F0E6; border-left: 5px solid #84B179; padding: 12px; border-radius: 4px; color: #1B211A; font-size: 14px;">
-                🔓 Chcesz zachować wyniki? <b>Zaloguj się</b>, aby nic Ci nie umknęło
-            </div>
-            """, 
-            unsafe_allow_html=True
+        """
+        <div style="background-color: #EAF4EA; border-left: 5px solid #84B179; padding: 12px; border-radius: 4px; color: #1B211A; font-size: 14px; margin-bottom: 10px;">
+            🔓 Chcesz zachować wyniki? <b>Zaloguj się</b>, aby nic Ci nie umknęło
+        </div>
+        """, 
+        unsafe_allow_html=True
         )
         
     st.divider()
@@ -681,7 +707,7 @@ with tab_symulacja:
                                             save_result_to_db(st.session_state.get('user_nick'), ostateczny_wynik, st.session_state.messages)
                                             st.rerun()
                                         except json.JSONDecodeError:
-                                            st.error("⚠️ Docent pomylił się przy wpisywaniu ocen do systemu. Odśwież stronę lub spróbuj ponownie.")
+                                            st.error("⚠️ Asystent pomylił się przy wpisywaniu ocen do systemu. Odśwież stronę lub spróbuj ponownie.")
                                             st.session_state.messages.pop()
 
                                 elif "OSTATECZNY WYNIK" in odpowiedz_tekst.upper():
@@ -820,7 +846,14 @@ with tab_statystyki:
                 final_chart = (line + points).properties(height=350)
                 st.altair_chart(final_chart, use_container_width=True)
             else:
-                st.info(f"Masz obecnie **{len(df)}** zapisanych wyników. Wykres z trendem postępów pojawi się po rozwiązaniu minimum 3 przypadków.")
+                st.markdown(
+                    f"""
+                    <div style="background-color: #F5F0E6; border-left: 5px solid #84B179; padding: 15px; border-radius: 4px; color: #1B211A; font-size: 15px;">
+                        📊 Masz obecnie <b>{len(df)}</b> zapisanych wyników. Wykres z trendem postępów pojawi się po rozwiązaniu minimum 3 przypadków.
+                    </div>
+                    """, 
+                    unsafe_allow_html=True
+                )
 
             st.divider()
             writing_base64 = __import__("base64").b64encode(open("writing.png", "rb").read()).decode()
@@ -849,7 +882,14 @@ with tab_statystyki:
                     else:
                         st.write("Brak zapisanej historii czatu dla tego przypadku (stary format w bazie). Nowe przypadki będą się tu poprawnie wyświetlać.")
         else:
-            st.info("Brak zapisanych wyników. Rozwiąż swój pierwszy przypadek, aby zacząć budować statystyki!")
+            st.markdown(
+                """
+                <div style="background-color: #F5F0E6; border-left: 5px solid #84B179; padding: 15px; border-radius: 4px; color: #1B211A; font-size: 15px;">
+                    ℹ️ <b>Brak zapisanych wyników.</b> Rozwiąż swój pierwszy przypadek, aby zacząć budować statystyki!
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
     else:
         st.markdown(
             """
