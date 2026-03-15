@@ -1,6 +1,6 @@
 [theme]
-# Główny kolor przycisków i zaznaczeń
-primaryColor = "#BDE3C3"
+# Główny kolor przycisków i zaznaczeń.
+primaryColor = "#84B179"
 
 # Kolor tła całej strony
 backgroundColor = "#E6D8C3"
