@@ -1,0 +1,93 @@
+/* DESKTOP*/
+
+/* ZAKŁADKI */
+div[data-baseweb="tab-list"] {
+    margin-top: -30px !important; 
+    justify-content: flex-end; 
+    gap: 10px;
+}
+button[data-baseweb="tab"] {
+    background-color: #F5F0E6 !important; 
+    border: 2px solid #84B179 !important; 
+    border-radius: 8px 8px 0px 0px !important; 
+    color: #1B211A !important; 
+    padding: 10px 20px !important;
+    font-weight: bold !important;
+}
+button[data-baseweb="tab"][aria-selected="true"] {
+    background-color: #84B179 !important; 
+    color: white !important; 
+    border-bottom: 2px solid #84B179 !important;
+}
+div[data-baseweb="tab-highlight"] {
+    display: none;
+}
+
+/* PRZYCISKI I KAFELKI */
+button:hover, 
+button:hover p, 
+button:hover span, 
+button:hover div,
+[data-testid="stExpander"] details summary:hover,
+[data-testid="stExpander"] details summary:hover p,
+[data-testid="stExpander"] details summary:hover span,
+[data-testid="stFileUploadDropzone"]:hover,
+[data-testid="stFileUploadDropzone"]:hover p,
+[data-testid="stFileUploadDropzone"]:hover span {
+    border-color: #088C6F !important;
+    color: #088C6F !important;
+    background-color: #F5F0E6 !important; 
+}
+
+/* Wygląd po kliknięciu */
+button:active, 
+button:active p, 
+button:active span {
+    background-color: #EAF4EA !important; 
+    color: #088C6F !important;
+}
+
+/* Wgrywanie PDF */
+[data-testid="stFileUploadDropzone"] {
+    background-color: #EAF4EA !important;
+    border: 2px dashed #84B179 !important;
+}
+[data-testid="stFileUploadDropzone"]:hover {
+    background-color: #F5F0E6 !important;
+    border-color: #088C6F !important;
+}
+[data-testid="stExpander"] details summary:hover {
+    background-color: #F5F0E6 !important;
+    color: #088C6F !important;
+}
+
+/* ZMIANA WYGLĄDU st.divider() */
+hr, [data-testid="stDivider"] {
+    border-top: 0px solid transparent !important;
+    border-bottom: 0px solid transparent !important;
+    border-left: none !important;
+    border-right: none !important;
+    height: 2px !important;
+    background-color: transparent !important;
+    background-image: linear-gradient(to right, transparent, #84B179, transparent) !important;
+    opacity: 0.5 !important;
+    margin: 20px 0 !important;
+}
+/*MOBILE*/
+
+@media (max-width: 768px) {
+    
+    .block-container {
+        padding-bottom: 150px !important; 
+    }
+    
+    div[data-baseweb="tab-list"] {
+        margin-top: 10px !important; 
+        justify-content: center !important; 
+        flex-wrap: wrap !important;
+    }
+    
+    [data-testid="stSidebar"] .stButton > button {
+        padding: 15px !important;
+    }
+}
