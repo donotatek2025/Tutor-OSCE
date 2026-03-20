@@ -18,6 +18,8 @@ from database import register_user, login_user, update_password, save_result_to_
 from ai_core import wyslij_wiadomosc_kaskadowo
 from utils import wczytaj_i_podziel_pdf, pobierz_awatar, pobierz_grafike_base64
 
+ICONS_PATH = "ikony"
+
 # JĘZYK
 def t(key):
     lang = st.session_state.get('lang', 'pl')
@@ -27,11 +29,12 @@ def t(key):
 # KONFIGURACJA STRONY I WYGLĄDU
 st.set_page_config(
     page_title="Tutor OSCE", 
-    page_icon="stethoscope.png", 
+    page_icon=os.path.join(ICONS_PATH, "stethoscope.png"), 
     layout="wide"
 )
 
-logo_base64 = __import__("base64").b64encode(open("stethoscope.png", "rb").read()).decode()
+logo_path = os.path.join(ICONS_PATH, "stethoscope.png")
+logo_base64 = __import__("base64").b64encode(open(logo_path, "rb").read()).decode()
 
 st.markdown(
     f"""
@@ -133,14 +136,14 @@ with st.sidebar:
             <hr style="border: 0; height: 2px; background: linear-gradient(to right, transparent, #84B179, transparent); margin-top: 20px; opacity: 0.5;">
         </div>
         """.format(
-            __import__("base64").b64encode(open("medical-report.png", "rb").read()).decode()
+            __import__("base64").b64encode(open("ikony/medical-report.png", "rb").read()).decode()
         ),
         unsafe_allow_html=True
     )
     
 
     # Bazy
-    medical_book_base64 = __import__("base64").b64encode(open("medical-book.png", "rb").read()).decode()
+    medical_book_base64 = __import__("base64").b64encode(open("ikony/medical-book.png", "rb").read()).decode()
     st.markdown(
         f"""
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
@@ -222,7 +225,7 @@ with st.sidebar:
 
 # losowanie przypadków
 
-    pills_base64 = __import__("base64").b64encode(open("pills.png", "rb").read()).decode()
+    pills_base64 = __import__("base64").b64encode(open("ikony/pills.png", "rb").read()).decode()
     st.markdown(
         f"""
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
@@ -271,7 +274,7 @@ with st.sidebar:
     st.caption(t("tip_refresh"))
     st.divider()
 
-    users_base64 = __import__("base64").b64encode(open("users.png", "rb").read()).decode()
+    users_base64 = __import__("base64").b64encode(open("ikony/users.png", "rb").read()).decode()
     st.markdown(
         f"""
         <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
@@ -306,8 +309,11 @@ with st.sidebar:
   # Wybór języka
     
     try:
-        pl_img = __import__("base64").b64encode(open("poland.png", "rb").read()).decode()
+        pl_img_path = os.path.join(ICONS_PATH, "poland.png")
+        pl_img = __import__("base64").b64encode(open(pl_img_path, "rb").read()).decode()
+        en_img_path = os.path.join(ICONS_PATH, "british.png")
         en_img = __import__("base64").b64encode(open("british.png", "rb").read()).decode()
+    
     except FileNotFoundError:
         st.error(f"{t('error')} : poland.png / british.png")
         pl_img, en_img = "", ""
@@ -627,7 +633,7 @@ with tab_statystyki:
         conn.close()
 
         if not df.empty:
-            business_base64 = __import__("base64").b64encode(open("business.png", "rb").read()).decode()
+            business_base64 = __import__("base64").b64encode(open("ikony/business.png", "rb").read()).decode()
             st.markdown(
                 f"""
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
@@ -666,7 +672,7 @@ with tab_statystyki:
                 )
 
             st.divider()
-            writing_base64 = __import__("base64").b64encode(open("writing.png", "rb").read()).decode()
+            writing_base64 = __import__("base64").b64encode(open("ikony/writing.png", "rb").read()).decode()
             st.markdown(
                 f"""
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
