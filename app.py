@@ -53,6 +53,12 @@ st.markdown(
 with open("style.css", "r", encoding="utf-8") as f:
     st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
+def pobierz_awatar(rola):
+    sciezka = "ikony/doctor.png" if rola == "ikony/assistant" else "ikony/point.png"
+    if os.path.exists(sciezka):
+        return Image.open(sciezka)
+    else:
+        return "🩺" if rola == "assistant" else "👤"
 
 # FUNKCJE NARZĘDZIOWE
 
