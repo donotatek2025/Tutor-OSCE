@@ -14,7 +14,7 @@ import pandas as pd
 import hashlib
 import altair as alt
 from translations import TRANSLATIONS
-from database import register_user, login_user, update_password, save_result_to_db, login_user, register_user, update_password, get_user_info, update_user_email, update_user_language, delete_user_account
+from database import register_user, login_user, update_password, save_result_to_db, get_user_info, update_user_email, update_user_language, delete_user_account
 from ai_core import wyslij_wiadomosc_kaskadowo
 from utils import wczytaj_i_podziel_pdf, pobierz_awatar, pobierz_grafike_base64
 from streamlit_cookies_controller import CookieController
