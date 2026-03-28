@@ -1,4 +1,6 @@
 streamlit
-PyPDF2
+streamlit-cookies-controller
 google-generativeai
-markdown
+PyPDF2
+pandas
+altair
