@@ -14,9 +14,11 @@ import pandas as pd
 import hashlib
 import altair as alt
 from translations import TRANSLATIONS
-from database import register_user, login_user, update_password, save_result_to_db
+from database import register_user, login_user, update_password, save_result_to_db, login_user, register_user, update_password, get_user_info, update_user_email, update_user_language, delete_user_account
 from ai_core import wyslij_wiadomosc_kaskadowo
 from utils import wczytaj_i_podziel_pdf, pobierz_awatar, pobierz_grafike_base64
+from streamlit_cookies_controller import CookieController
+controller = CookieController()
 
 ICONS_PATH = "ikony"
 
@@ -107,29 +109,49 @@ def generuj_raport_html(wszystkie_przypadki):
     return html
 
 # INICJALIZACJA PAMIĘCI
-if "show_register" not in st.session_state:
-    st.session_state.show_register = False
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-if "chat_session" not in st.session_state:
-    st.session_state.chat_session = None
-if "messages" not in st.session_state:
-    st.session_state.messages = [{"role": "assistant", "content": t("welcome_msg")}]
-    st.session_state.historia_wynikow = []
-if "zapisane_przypadki" not in st.session_state:
-    st.session_state.zapisane_przypadki = []
-if "widok_archiwum" not in st.session_state:
-    st.session_state.widok_archiwum = None
-
-if "widok_archiwum" not in st.session_state:
-    st.session_state.widok_archiwum = None
-if "liczba_podpowiedzi" not in st.session_state:
-    st.session_state.liczba_podpowiedzi = 0
 
 if "lang" not in st.session_state:
     st.session_state.lang = "pl"
+
+if "logged_in" not in st.session_state:
+    zapisany_user = controller.get("tutor_osce_user")
+    
+    if zapisany_user:
+        st.session_state.logged_in = True
+        st.session_state.user_nick = zapisany_user
+        
+        try:
+            user_info = get_user_info(zapisany_user)
+            db_lang = user_info.get("language", "pl")
+            if db_lang == "Polski": db_lang = "pl"
+            if db_lang == "English": db_lang = "en"
+            st.session_state.lang = db_lang
+        except Exception:
+            pass 
+    else:
+        st.session_state.logged_in = False
+
+if "show_register" not in st.session_state:
+    st.session_state.show_register = False
+
+if "chat_session" not in st.session_state:
+    st.session_state.chat_session = None
+
 if "messages" not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": t("welcome_msg")}]
+
+if "historia_wynikow" not in st.session_state:
+    st.session_state.historia_wynikow = []
+
+if "zapisane_przypadki" not in st.session_state:
+    st.session_state.zapisane_przypadki = []
+
+if "widok_archiwum" not in st.session_state:
+    st.session_state.widok_archiwum = None
+
+if "liczba_podpowiedzi" not in st.session_state:
+    st.session_state.liczba_podpowiedzi = 0
+
 
 # SIDEBAR
 with st.sidebar:
@@ -489,7 +511,8 @@ with tab_symulacja:
                             "wynik": "100",
                             "historia": list(st.session_state.messages)
                         })
-                        save_result_to_db(st.session_state.get('user_nick'), 100, st.session_state.messages)
+                        obecna_kategoria = st.session_state.get('aktywna_kategoria', 'inne')
+                        save_result_to_db(st.session_state.get('user_nick'), 100, st.session_state.messages, obecna_kategoria)
                         st.rerun()
                         
                     else:
@@ -576,7 +599,11 @@ with tab_symulacja:
                                                 "wynik": str(ostateczny_wynik),
                                                 "historia": [dict(m) for m in st.session_state.messages]
                                             })
-                                            save_result_to_db(st.session_state.get('user_nick'), ostateczny_wynik, st.session_state.messages)
+                                            
+                                            
+                                            obecna_kategoria = st.session_state.get('aktywna_kategoria', 'inne')
+                                            save_result_to_db(st.session_state.get('user_nick'), ostateczny_wynik, st.session_state.messages, obecna_kategoria)
+                                            
                                             st.rerun()
                                         except json.JSONDecodeError:
                                             st.error(t("error"))
@@ -596,7 +623,7 @@ with tab_symulacja:
                                 else:
                                     st.session_state.messages.append({"role": "assistant", "content": odpowiedz_tekst})
                                     st.rerun()
- # ZAKŁADKA: KONTO
+# ZAKŁADKA: KONTO
 with tab_konto:
     if not st.session_state.logged_in:
         
@@ -613,6 +640,18 @@ with tab_konto:
                     if login_user(log_user, log_pass):
                         st.session_state.logged_in = True
                         st.session_state.user_nick = log_user
+                        
+                        controller.set("tutor_osce_user", log_user, max_age=30*86400)
+
+                        user_info = get_user_info(log_user)
+                        st.session_state.user_email = user_info["email"]
+                        
+                        db_lang = user_info["language"]
+                        if db_lang == "Polski": db_lang = "pl"
+                        if db_lang == "English": db_lang = "en"
+                        if not db_lang: db_lang = "pl"
+                        
+                        st.session_state.lang = db_lang
                         st.session_state.show_register = False 
                         st.rerun()
                     else:
@@ -645,78 +684,305 @@ with tab_konto:
                     st.rerun()
 
     else:
+        import time 
         
         st.markdown(
             f"""
             <div style="background-color: #EAF4EA; border-left: 6px solid #84B179; padding: 20px; border-radius: 8px; margin-bottom: 25px;">
-                <h3 style="color: #1B211A; margin: 0;">{t('hello2')} <span style="color: #088C6F;">{st.session_state.user_nick}</span>!</h3>
-                <p style="margin: 5px 0 0 0; color: #555; font-size: 14px;">{t('hello3')}</p>
+                <h3 style="color: #1B211A; margin: 0;">Witaj ponownie, <span style="color: #088C6F;">{st.session_state.user_nick}</span>!</h3>
+                <p style="margin: 5px 0 0 0; color: #555; font-size: 14px;">Zarządzaj swoimi danymi i ustawieniami konta poniżej.</p>
             </div>
             """, 
             unsafe_allow_html=True
         )
         
-    
-        with st.expander(t("change_pass")):
-            old_p = st.text_input(t("old_pass"), type="password", key="old_p")
-            new_p = st.text_input(t("new_pass"), type="password", key="new_p")
-            if st.button(t("update_btn")):
+        # SEKCJA 1: DANE PROFILU I PREFERENCJE 
+        users_base64 = __import__("base64").b64encode(open("ikony/users.png", "rb").read()).decode()
+        st.markdown(
+                f"""
+                <div style="display: flex; align-items: center; margin-bottom: 20px;">
+                    <img src="data:image/png;base64,{users_base64}" width="30" style="margin-right: 12px; vertical-align: middle;">
+                    <h3 style="margin: 0; font-weight: 600; font-size: 1.25rem; color: #1B211A; vertical-align: middle;">Twoje dane i preferencje</h3>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+        
+        st.text_input("Nazwa użytkownika (Login)", value=st.session_state.user_nick, disabled=True)
+        
+        current_email = st.session_state.get("user_email", "")
+        nowy_email = st.text_input("Adres e-mail", value=current_email)
+        
+        
+        aktualny_kod = st.session_state.get("lang", "pl")
+        opcje = {"pl": "Polski", "en": "English"}
+        odwrotnie = {"Polski": "pl", "English": "en"}
+        aktualna_nazwa = opcje.get(aktualny_kod, "Polski")
+        
+        wybrany_jezyk_nazwa = st.selectbox(
+            "Domyślny język aplikacji", 
+            ["Polski", "English"], 
+            index=["Polski", "English"].index(aktualna_nazwa)
+        )
+            
+        
+        if st.button("Zapisz zmiany", type="primary", use_container_width=True):
+            zmiany_wprowadzone = False
+            
+            
+            if nowy_email != current_email:
+                update_user_email(st.session_state.user_nick, nowy_email)
+                st.session_state.user_email = nowy_email
+                zmiany_wprowadzone = True
+                
+          
+            nowy_kod = odwrotnie[wybrany_jezyk_nazwa]
+            if nowy_kod != aktualny_kod:
+                update_user_language(st.session_state.user_nick, nowy_kod)
+                st.session_state.lang = nowy_kod
+                st.session_state.chat_session = None 
+                zmiany_wprowadzone = True
+                
+            if zmiany_wprowadzone:
+                st.toast("Zmiany zostały pomyślnie zapisane!", icon="✅")
+                time.sleep(1.2)
+                st.rerun()
+            else:
+                st.toast("Brak zmian do zapisania.", icon="ℹ️")
+
+        st.divider()
+
+        # SEKCJA 2: ZARZĄDZANIE KONTEM (UKRYTE/ZWIJANE)
+        st.subheader("⚙️ Zarządzanie kontem")
+        
+        with st.expander("🔑 Zmień hasło"):
+            col_old, col_new = st.columns(2)
+            with col_old:
+                old_p = st.text_input("Stare hasło", type="password", key="old_p")
+            with col_new:
+                new_p = st.text_input("Nowe hasło", type="password", key="new_p")
+            
+            if st.button("Zaktualizuj hasło"):
                 if old_p and new_p:
                     if update_password(st.session_state.user_nick, old_p, new_p):
-                        st.success(t("success_pass"))
+                        st.success("Hasło zostało zmienione pomyślnie!")
                     else:
-                        st.error(t("bad_pass"))
+                        st.error("Błędne stare hasło lub błąd aktualizacji.")
                 else:
-                    st.warning(t("daj2"))
-        
+                    st.warning("Proszę wypełnić oba pola.")
+
+        # Usunięcie konta
+        with st.expander("🚨 Usuń konto"):
+            st.error("Uwaga: Usunięcie konta jest nieodwracalne. Utracisz wszystkie swoje dane oraz historię wyników.")
+            
+            potwierdzenie = st.text_input(f"Aby potwierdzić, wpisz swój login: {st.session_state.user_nick}")
+            
+            if st.button("Trwale usuń moje konto", type="primary"):
+                if potwierdzenie == st.session_state.user_nick:
+                    delete_user_account(st.session_state.user_nick)
+                    st.session_state.logged_in = False
+                    st.session_state.user_nick = None
+                    st.session_state.user_email = ""
+                    st.warning("Twoje konto zostało usunięte.")
+                    time.sleep(1.5)
+                    st.rerun()
+                else:
+                    st.error("Podany login nie pasuje. Operacja przerwana.")
+
         st.divider()
-        
-        col_wyloguj, _ = st.columns([1, 3])
+
+        # SEKCJA 3: WYLOGOWANIE
+        col_pusta1, col_wyloguj, col_pusta2 = st.columns([1, 2, 1])
         with col_wyloguj:
-            if st.button(t("btn_logout"), use_container_width=True):
+            if st.button("🚪 Wyloguj się", use_container_width=True):
+                controller.remove("tutor_osce_user")
                 st.session_state.logged_in = False
                 st.session_state.user_nick = None
+                st.session_state.user_email = ""
                 st.session_state.show_register = False
                 st.rerun()
 
-
- # zakładka postępy
+# zakładka postępy
 with tab_statystyki:
     current_user = st.session_state.get('user_nick')
     if current_user:
         conn = sqlite3.connect('osce_history.db')
-        df = pd.read_sql_query("SELECT id, date, score, history FROM results WHERE username = ? ORDER BY id DESC", conn, params=(current_user,))
+        df = pd.read_sql_query("SELECT id, date, score, history, category FROM results WHERE username = ? ORDER BY id DESC", conn, params=(current_user,))
         conn.close()
 
         if not df.empty:
-            business_base64 = __import__("base64").b64encode(open("ikony/business.png", "rb").read()).decode()
+            if 'category' not in df.columns:
+                df['category'] = 'inne'
+            else:
+                df['category'] = df['category'].fillna('inne')
+            
+            KOLORY_KAT = {
+                "interna": "#AACDDC",
+                "pedsy": "#FFF2C6",
+                "ratunkowa": "#EA907A",
+                "inne": "#F5F0E6",
+                "wlasne": "#F5F0E6"
+            }
+            IKONY_KAT = {
+                "interna": "🩺",
+                "pedsy": "🧸",
+                "ratunkowa": "🚑",
+                "inne": "📁",
+                "wlasne": "📁"
+            }
+            
+            PULA_PRZYPADKOW = {}
+            try:
+                import os
+                import json
+                
+                if os.path.exists("my_notes"):
+                    for plik in os.listdir("my_notes"):
+                        if plik.endswith(".json"):
+                            kat = plik.replace(".json", "").lower()
+                            with open(os.path.join("my_notes", plik), "r", encoding="utf-8") as f:
+                                przypadki_w_pliku = json.load(f)
+                                PULA_PRZYPADKOW[kat] = len(przypadki_w_pliku)
+            except Exception:
+                pass 
+                
+            try:
+                ile_wlasnych = len([c for c in lista_wszystkich_chorob if c.get("kategoria") == "wlasne"])
+                if ile_wlasnych > 0:
+                    PULA_PRZYPADKOW["wlasne"] = ile_wlasnych
+            except NameError:
+                pass
+                
+            calkowita_pula = sum(PULA_PRZYPADKOW.values())
+
+            # --- KPI
+            def duzy_kafelek(wartosc, opis, bg_color="#F5F0E6", text_color="#1B211A"):
+                return f"""
+                <div style="background-color: {bg_color}; border-radius: 10px; padding: 20px; text-align: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-bottom: 10px; height: 110px; display: flex; flex-direction: column; justify-content: center; border: 1px solid rgba(0,0,0,0.05);">
+                    <div style="font-size: 2.8rem; font-weight: 900; color: {text_color}; line-height: 1;">{wartosc}</div>
+                    <div style="font-size: 0.8rem; font-weight: 800; color: rgba(27, 33, 26, 0.75); text-transform: uppercase; margin-top: 8px; letter-spacing: 0.5px;">{opis}</div>
+                </div>
+                """
+
+            try:
+                business_base64 = __import__("base64").b64encode(open("ikony/business.png", "rb").read()).decode()
+            except FileNotFoundError:
+                business_base64 = ""
+                
             st.markdown(
                 f"""
                 <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
                     <img src="data:image/png;base64,{business_base64}" width="30">
-                    <h3 style="margin: 0; color: #1B211A;">{t("stat_title")}: <span style='color: #088C6F;'>{current_user}</span></h3>
+                    <h3 style="margin: 0; color: #1B211A;">{t('stat_title')} <span style='color: #088C6F;'>{current_user}</span></h3>
                 </div>
                 """, 
                 unsafe_allow_html=True
             )
             
+            if "kpi_cat_idx" not in st.session_state:
+                st.session_state.kpi_cat_idx = 0
+            if "kpi_best_idx" not in st.session_state:
+                st.session_state.kpi_best_idx = 0 
+                
+            kpi_categories = [t('kpi_overall')] + df['category'].unique().tolist()
+            if st.session_state.kpi_cat_idx >= len(kpi_categories):
+                st.session_state.kpi_cat_idx = 0
+                
+            current_kpi_cat = kpi_categories[st.session_state.kpi_cat_idx]
+            df_kpi = df if current_kpi_cat == t('kpi_overall') else df[df['category'] == current_kpi_cat]
             
+           
+            display_kpi_cat = current_kpi_cat if current_kpi_cat == t('kpi_overall') else t(f"cat_{current_kpi_cat}")
+            
+            col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
+            
+            with col_kpi1:
+                etykieta_ilosci = f"{t('kpi_cases')} ({display_kpi_cat})"
+                st.markdown(duzy_kafelek(len(df_kpi), etykieta_ilosci), unsafe_allow_html=True)
+                
+            with col_kpi2:
+                srednia_kat = df_kpi['score'].mean() if not df_kpi.empty else 0
+                kolor_tla_kpi = KOLORY_KAT.get(current_kpi_cat, "#F5F0E6") if current_kpi_cat != t('kpi_overall') else "#F5F0E6"
+                etykieta_sredniej = f"📊 {t('kpi_avg')} ({display_kpi_cat})"
+                
+                st.markdown(duzy_kafelek(f"{round(srednia_kat)}%", etykieta_sredniej, bg_color=kolor_tla_kpi), unsafe_allow_html=True)
+                
+                if len(kpi_categories) > 1:
+                    c2_l, c2_m, c2_r = st.columns([1, 3, 1])
+                    with c2_l:
+                        if st.button("◀", key="prev_cat", help=t('kpi_prev'), use_container_width=True):
+                            st.session_state.kpi_cat_idx = (st.session_state.kpi_cat_idx - 1) % len(kpi_categories)
+                            st.rerun()
+                    with c2_r:
+                        if st.button("▶", key="next_cat", help=t('kpi_next'), use_container_width=True):
+                            st.session_state.kpi_cat_idx = (st.session_state.kpi_cat_idx + 1) % len(kpi_categories)
+                            st.rerun()
+                            
+            with col_kpi3:
+                is_best = (st.session_state.kpi_best_idx == 0)
+                score_val = df_kpi['score'].max() if is_best and not df_kpi.empty else (df_kpi['score'].min() if not df_kpi.empty else 0)
+                ikona_rekordu = t('kpi_best') if is_best else t('kpi_worst')
+                etykieta_rekordu = f"{ikona_rekordu} ({display_kpi_cat})"
+                
+                st.markdown(duzy_kafelek(f"{score_val}%", etykieta_rekordu), unsafe_allow_html=True)
+                
+                c3_l, c3_m, c3_r = st.columns([1, 3, 1])
+                with c3_l:
+                    if st.button("◀", key="prev_best", help=t('kpi_toggle'), use_container_width=True):
+                        st.session_state.kpi_best_idx = 1 - st.session_state.kpi_best_idx
+                        st.rerun()
+                with c3_r:
+                    if st.button("▶", key="next_best", help=t('kpi_toggle'), use_container_width=True):
+                        st.session_state.kpi_best_idx = 1 - st.session_state.kpi_best_idx
+                        st.rerun()
+                
+            st.divider()
+            
+            # --- 2. ZAKŁADKI Z WYKRESAMI ---
             if len(df) >= 3:
-                chart_data = df.copy().sort_values('date')
+                tab_trend, tab_kat, tab_rozklad = st.tabs([t('tab_trend'), t('tab_avg_cat'), t('tab_dist')])
                 
-                
-                base = alt.Chart(chart_data).encode(
-                    x=alt.X('date', title=t("date_simulation"), axis=alt.Axis(labelAngle=-45)),
-                    y=alt.Y('score', title=t("score_label"), scale=alt.Scale(domain=[0, 100])),
-                    tooltip=[alt.Tooltip('date', title=t("date_simulation")), alt.Tooltip('score', title=t("score_label"))]
-                )
-                
-                line = base.mark_line(color='#84B179', size=3)
-                points = base.mark_circle(color='#088C6F', size=80)
-                
-                
-                final_chart = (line + points).properties(height=350)
-                st.altair_chart(final_chart, use_container_width=True)
+                with tab_trend:
+                    chart_data = df.copy().sort_values('date')
+                    base = alt.Chart(chart_data).encode(
+                        x=alt.X('date', title=t("date_simulation"), axis=alt.Axis(labelAngle=-45)),
+                        y=alt.Y('score', title=t("score_label"), scale=alt.Scale(domain=[0, 100])),
+                        tooltip=[alt.Tooltip('date', title=t("date_simulation")), alt.Tooltip('score', title=t("score_label")), alt.Tooltip('category', title=t("lbl_category"))]
+                    )
+                    line = base.mark_line(color='#84B179', size=3)
+                    points = base.mark_circle(color='#088C6F', size=80)
+                    st.altair_chart((line + points).properties(height=350), use_container_width=True)
+                    
+                with tab_kat:
+                    bar_data = df.groupby('category')['score'].mean().reset_index()
+                    color_scale = alt.Scale(
+                        domain=list(KOLORY_KAT.keys()),
+                        range=list(KOLORY_KAT.values())
+                    )
+                    bar_chart = alt.Chart(bar_data).mark_bar(cornerRadiusTopLeft=5, cornerRadiusTopRight=5).encode(
+                        x=alt.X('category', title=t("lbl_category"), sort='-y', axis=alt.Axis(labelAngle=0)),
+                        y=alt.Y('score', title=t("lbl_avg_score"), scale=alt.Scale(domain=[0, 100])),
+                        color=alt.Color('category', scale=color_scale, legend=None),
+                        tooltip=[alt.Tooltip('category', title=t("lbl_category")), alt.Tooltip('score', title=t("kpi_avg"))]
+                    ).properties(height=350)
+                    st.altair_chart(bar_chart, use_container_width=True)
+                    
+                with tab_rozklad:
+                    pie_data = df['category'].value_counts().reset_index()
+                    pie_data.columns = ['category', 'count']
+                    
+                    pie_color_scale = alt.Scale(
+                        domain=list(KOLORY_KAT.keys()),
+                        range=list(KOLORY_KAT.values())
+                    )
+                    
+                    pie_chart = alt.Chart(pie_data).mark_arc(innerRadius=60, stroke="#fff", strokeWidth=2).encode(
+                        theta=alt.Theta(field="count", type="quantitative"),
+                        color=alt.Color(field="category", type="nominal", scale=pie_color_scale, legend=alt.Legend(title=t("lbl_category"), orient="right", titleFontSize=14, labelFontSize=12)),
+                        tooltip=[alt.Tooltip('category', title=t("lbl_category")), alt.Tooltip('count', title=t("lbl_cases_count"))]
+                    ).properties(height=350)
+                    
+                    st.altair_chart(pie_chart, use_container_width=True)
             else:
                 st.markdown(
                     f"""
@@ -728,10 +994,16 @@ with tab_statystyki:
                 )
 
             st.divider()
-            writing_base64 = __import__("base64").b64encode(open("ikony/writing.png", "rb").read()).decode()
+            
+            # --- 3. FILTROWANIE I ARCHIWUM ---
+            try:
+                writing_base64 = __import__("base64").b64encode(open("ikony/writing.png", "rb").read()).decode()
+            except FileNotFoundError:
+                writing_base64 = ""
+                
             st.markdown(
                 f"""
-                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
+                <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 5px;">
                     <img src="data:image/png;base64,{writing_base64}" width="30">
                     <h3 style="margin: 0; color: #1B211A;">{t("resolved_cases")}</h3>
                 </div>
@@ -739,16 +1011,77 @@ with tab_statystyki:
                 unsafe_allow_html=True
             )
             
+            col_filtr, _ = st.columns([1, 2])
+            with col_filtr:
+                opcje_filtru = [t("filter_all")] + df['category'].unique().tolist()
+                filtr_kategorii = st.selectbox(t("filter_history"), opcje_filtru, key="history_filter")
+                
+            df_filtered = df if filtr_kategorii == t("filter_all") else df[df['category'] == filtr_kategorii]
             
-            for i, row in df.iterrows():
-                with st.expander(f"⏱ {row['date']} — {t('report_score')} {row['score']}%"):
+            if filtr_kategorii == t("filter_all"):
+                kat_ikona_filtr = "🌍"
+                kolor_tla_filtr = "#EAF4EA"
+                tytul_banera = t("summary_all")
+                pula_docelowa = calkowita_pula if calkowita_pula > 0 else len(df)
+            else:
+                kat_ikona_filtr = IKONY_KAT.get(filtr_kategorii, "📁")
+                kolor_tla_filtr = KOLORY_KAT.get(filtr_kategorii, "#F5F0E6")
+                tytul_banera = f"{t('summary_cat')} {t(f'cat_{filtr_kategorii}').upper()}"
+                pula_docelowa = PULA_PRZYPADKOW.get(filtr_kategorii, len(df_filtered))
+                if pula_docelowa == 0: pula_docelowa = len(df_filtered) if len(df_filtered) > 0 else 1
+
+            st.markdown(f"""
+            <div style="background-color: {kolor_tla_filtr}; padding: 12px 20px; border-radius: 8px; margin-bottom: 15px; border-left: 6px solid rgba(0,0,0,0.15); display: flex; align-items: center;">
+                <span style="color: #1B211A; font-weight: 800; font-size: 1.1rem; letter-spacing: 0.5px;">{kat_ikona_filtr} {tytul_banera}</span>
+            </div>
+            """, unsafe_allow_html=True)
+            
+            c1, c2, c3, c4 = st.columns(4)
+            
+            def mini_kafelek(wartosc, opis):
+                return f"""
+                <div style="background-color: #F9F9F9; border-left: 4px solid #088C6F; padding: 10px; border-radius: 4px; margin-bottom: 15px;">
+                    <div style="font-size: 11px; color: #7f8c8d; text-transform: uppercase; font-weight: bold;">{opis}</div>
+                    <div style="font-size: 1.4rem; color: #1B211A; font-weight: 800;">{wartosc}</div>
+                </div>
+                """
+            
+            max_score = df_filtered['score'].max() if not df_filtered.empty else 0
+            min_score = df_filtered['score'].min() if not df_filtered.empty else 0
+            avg_score = round(df_filtered['score'].mean()) if not df_filtered.empty else 0
+            
+            wykonane_przypadki = len(df_filtered)
+            procent_ukonczenia = min((wykonane_przypadki / pula_docelowa) * 100, 100) if pula_docelowa > 0 else 0
+            
+            c1.markdown(mini_kafelek(f"{max_score}%", t("kpi_best")), unsafe_allow_html=True)
+            c2.markdown(mini_kafelek(f"{min_score}%", t("kpi_worst")), unsafe_allow_html=True)
+            c3.markdown(mini_kafelek(f"{avg_score}%", f"📊 {t('kpi_avg')}"), unsafe_allow_html=True)
+            c4.markdown(mini_kafelek(f"{wykonane_przypadki} / {pula_docelowa}", f"{t('lbl_completed')} ({procent_ukonczenia:.0f}%)"), unsafe_allow_html=True)
+            
+            for i, row in df_filtered.iterrows():
+                kat = row['category']
+                kat_ikona = IKONY_KAT.get(kat, "📁")
+                kolor_tla = KOLORY_KAT.get(kat, "#F5F0E6")
+                kat_display = t(f"cat_{kat}")
+                
+                with st.expander(f"{kat_ikona} {row['date']} | {kat_display.upper()} — {t('report_score')} {row['score']}%"):
+                    
+                    st.markdown(f"""
+                    <div style="background-color: {kolor_tla}; padding: 12px 20px; border-radius: 8px; margin-bottom: 20px; border-left: 6px solid rgba(0,0,0,0.15); display: flex; justify-content: space-between; align-items: center;">
+                        <span style="color: #1B211A; font-weight: 800; font-size: 1.1rem; letter-spacing: 0.5px;">{kat_ikona} {kat_display.upper()}</span>
+                        <span style="background-color: rgba(255,255,255,0.7); padding: 4px 12px; border-radius: 20px; font-weight: 800; color: #1B211A; font-size: 0.9rem;">{t('lbl_saved_score')} {row['score']}%</span>
+                    </div>
+                    """, unsafe_allow_html=True)
                     
                     if pd.notna(row['history']) and row['history']:
                         try:
                             case_history = json.loads(row['history'])
                             for message in case_history:
                                 with st.chat_message(message["role"], avatar=pobierz_awatar(message["role"])):
-                                    st.markdown(message["content"])
+                                    if 'renderuj_wiadomosc' in globals() or 'renderuj_wiadomosc' in locals():
+                                        renderuj_wiadomosc(message)
+                                    else:
+                                        st.markdown(message["content"])
                         except json.JSONDecodeError:
                             st.error(t("error"))
                     else:
