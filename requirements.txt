@@ -4,3 +4,4 @@ google-generativeai
 PyPDF2
 pandas
 altair
+markdown
